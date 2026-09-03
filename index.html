@@ -354,6 +354,7 @@ $('#reader').addEventListener('focusout', e => {
 
 /* ---------- motore di sostituzione ---------- */
 function regola(q, {intera, maiusc, regex}){
+  if (!regex) q = (q || '').trim();
   if (!q) return null;
   let src = regex ? q : q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   if (intera && !regex) src = '(?<![\\p{L}\\p{N}])' + src + '(?![\\p{L}\\p{N}])';
@@ -449,9 +450,9 @@ function disegnaCoppie(){
   const c = $('#coppie'); c.innerHTML = '';
   coppie.forEach((p, i) => {
     const d = document.createElement('div'); d.className = 'coppia';
-    d.innerHTML = `<input type="text" value="" placeholder="trova" spellcheck="false" autocapitalize="none">
+    d.innerHTML = `<input type="text" value="" placeholder="trova" spellcheck="false" autocapitalize="none" autocorrect="off" autocomplete="off">
                    <span class="fre">→</span>
-                   <input type="text" value="" placeholder="con" spellcheck="false" autocapitalize="none">
+                   <input type="text" value="" placeholder="con" spellcheck="false" autocapitalize="none" autocorrect="off" autocomplete="off">
                    <button class="via" title="Togli">×</button>`;
     const [a,b] = d.querySelectorAll('input');
     a.value = p[0]; b.value = p[1];
@@ -476,9 +477,9 @@ $('#bApplica').onclick = () => {
   const o = opzioni();
   let t = TESTO, segni = [manuali, serieMark], nuoviTot = [], totale = 0, dett = [];
   for (const [a,b] of coppie){
-    if (!a) continue;
+    if (!a || !a.trim()) continue;
     const re = regola(a, o); if (!re) continue;
-    const res = applicaRegola(t, re, x => forma(x, b, o.forma), [...segni, new Set(nuoviTot)]);
+    const res = applicaRegola(t, re, x => forma(x, b.trim(), o.forma), [...segni, new Set(nuoviTot)]);
     t = res.testo;
     segni = [res.segni[0], res.segni[1]];
     nuoviTot = [...res.segni[2], ...res.nuovi];
