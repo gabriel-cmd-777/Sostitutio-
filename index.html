@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Lettore">
+<meta name="theme-color" content="#e9eae4">
+<title>Lettore con sostituzioni</title>
+<style>
+  :root{
+    --paper:#e9eae4;
+    --ink:#171a19;
+    --muted:#6d7370;
+    --rule:#c9cbc3;
+    --field:#f4f5f1;
+    --hit:#cfe0d4;
+    --hit-cur:#f0cf8e;
+    --manuale:#8c3a2e;
+    --serie:#3f5d7d;
+    --focus:#3d5a6c;
+    --ombra:0 -6px 24px rgba(0,0,0,.12);
+  }
+  html[data-tema="notte"]{
+    --paper:#15181a; --ink:#d9d7cf; --muted:#8a908d; --rule:#2c3134; --field:#1d2124;
+    --hit:#2f4a3a; --hit-cur:#6b5320; --manuale:#d99182; --serie:#8fb4d6; --focus:#89b4c9;
+    --ombra:0 -6px 24px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;overscroll-behavior:none}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;
+    display:flex;flex-direction:column;
+    touch-action:manipulation;-webkit-text-size-adjust:100%;
+  }
+  button,input,select,textarea{font:inherit;color:inherit}
+  button{
+    background:none;border:1px solid var(--rule);border-radius:6px;
+    padding:0 .8em;min-height:44px;cursor:pointer;white-space:nowrap;
+  }
+  button:active{background:var(--field)}
+  button.pieno{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  button.piccolo{min-height:38px;padding:0 .6em;font-size:15px}
+  button:disabled{opacity:.4}
+  button:focus-visible,input:focus-visible,[contenteditable]:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+  input[type=text],input[type=url],textarea{
+    background:var(--field);border:1px solid var(--rule);border-radius:6px;
+    padding:.55em .6em;color:var(--ink);font-size:16px;width:100%;
+  }
+  .chip{
+    display:inline-flex;align-items:center;gap:.35em;border:1px solid var(--rule);
+    border-radius:999px;padding:.35em .75em;color:var(--muted);white-space:nowrap;
+  }
+  .chip input{accent-color:var(--focus);width:18px;height:18px;margin:0}
+  .chip.on{color:var(--ink);border-color:var(--ink)}
+
+  /* barra */
+  #bar{
+    display:flex;gap:.4em;align-items:center;padding:.45em .6em;
+    padding-top:calc(.45em + env(safe-area-inset-top));
+    border-bottom:1px solid var(--rule);overflow-x:auto;-webkit-overflow-scrolling:touch;
+  }
+  #bar::-webkit-scrollbar{display:none}
+  #bar .sep{flex:1;min-width:0}
+  #stato{color:var(--muted);font-size:13px;white-space:nowrap}
+
+  /* lettura */
+  #reader{
+    flex:1;overflow:auto;-webkit-overflow-scrolling:touch;
+    padding:3vh 1.1em calc(28vh + env(safe-area-inset-bottom));
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-size:var(--corpo,1.2rem);line-height:1.6;
+  }
+  #reader .col{max-width:34em;margin:0 auto}
+  #reader p{margin:0 0 1.05em;text-align:justify;hyphens:auto}
+  .w{border-radius:3px;cursor:text}
+  .w.m{background:var(--hit)}
+  .w.cur{background:var(--hit-cur)}
+  .w.ed{color:var(--manuale)}
+  .w.sb{color:var(--serie)}
+  .w[contenteditable="true"]{background:var(--field);box-shadow:inset 0 -2px 0 var(--focus)}
+  .vuoto{color:var(--muted);font-family:system-ui,sans-serif;font-size:1rem}
+
+  /* pannelli a scomparsa dal basso */
+  .sheet{
+    position:fixed;left:0;right:0;bottom:0;z-index:20;
+    background:var(--paper);border-top:1px solid var(--rule);box-shadow:var(--ombra);
+    padding:.7em .8em calc(.7em + env(safe-area-inset-bottom));
+    max-height:78dvh;overflow:auto;-webkit-overflow-scrolling:touch;
+    display:flex;flex-direction:column;gap:.6em;
+  }
+  .sheet[hidden]{display:none}
+  .testa{display:flex;align-items:center;gap:.5em}
+  .testa h2{margin:0;font-size:16px;font-weight:600;flex:1}
+  .riga{display:flex;gap:.4em;align-items:center}
+  .riga>*{flex:1}
+  .riga.auto>*{flex:0 0 auto}
+  .opzioni{display:flex;gap:.4em;overflow-x:auto;padding-bottom:.2em}
+  .opzioni::-webkit-scrollbar{display:none}
+  .nota{color:var(--muted);font-size:13.5px;margin:0}
+  .elenco{display:flex;flex-direction:column;gap:.4em}
+  .voce{display:flex;gap:.5em;align-items:center;border:1px solid var(--rule);border-radius:6px;padding:.5em .6em}
+  .voce .nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .voce .data{color:var(--muted);font-size:13px}
+  .coppia{display:flex;gap:.4em;align-items:center}
+  .coppia .fre{color:var(--muted);flex:0 0 auto}
+  .coppia .via{flex:0 0 auto;width:44px;min-height:44px;border:none;color:var(--muted);font-size:20px}
+  #esito{color:var(--muted);font-size:14px;font-variant-numeric:tabular-nums}
+  #velo{position:fixed;inset:0;z-index:15;background:transparent}
+  #velo[hidden]{display:none}
+
+  /* modalità solo testo */
+  body.lettura #bar{display:none}
+  #torna{
+    position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:10;
+    width:46px;height:46px;min-height:46px;border-radius:50%;padding:0;
+    background:var(--field);border:1px solid var(--rule);opacity:.75;font-size:18px;
+  }
+  body:not(.lettura) #torna{display:none}
+
+  @media (min-width:760px){
+    .sheet{left:auto;right:16px;bottom:16px;width:34em;border:1px solid var(--rule);border-radius:10px}
+    #reader{padding-bottom:12vh}
+  }
+</style>
+</head>
+<body>
+
+<header id="bar">
+  <button id="bTrova" class="piccolo">Trova</button>
+  <button id="bSerie" class="piccolo">Serie</button>
+  <button id="bTesti" class="piccolo">Testi</button>
+  <button id="bVista" class="piccolo">Aa</button>
+  <span class="sep"></span>
+  <span id="stato"></span>
+</header>
+
+<main id="reader" autocorrect="off" autocapitalize="none" spellcheck="false">
+  <div class="col"><p class="vuoto">Nessun testo aperto. Tocca Testi per caricarne uno.</p></div>
+</main>
+
+<button id="torna" title="Mostra la barra">▾</button>
+<div id="velo" hidden></div>
+
+<!-- TROVA E SOSTITUISCI -->
+<section class="sheet" id="shTrova" hidden>
+  <div class="testa"><h2>Trova e sostituisci</h2><span id="esito"></span><button class="piccolo chiudi">Chiudi</button></div>
+  <input type="text" id="q" placeholder="trova" spellcheck="false" autocapitalize="none" autocorrect="off" enterkeyhint="search">
+  <input type="text" id="r" placeholder="sostituisci con" spellcheck="false" autocapitalize="none" autocorrect="off" enterkeyhint="done">
+  <div class="riga">
+    <button id="bPrec">‹ Prec</button>
+    <button id="bSucc">Succ ›</button>
+    <button id="bUno">Sostituisci</button>
+    <button id="bTutte" class="pieno">Tutte</button>
+  </div>
+  <div class="opzioni">
+    <label class="chip"><input type="checkbox" id="cIntera" checked> parola intera</label>
+    <label class="chip"><input type="checkbox" id="cMaiusc"> maiuscole</label>
+    <label class="chip"><input type="checkbox" id="cForma" checked> conserva iniziale</label>
+    <label class="chip"><input type="checkbox" id="cRegex"> regex</label>
+  </div>
+</section>
+
+<!-- SERIE DI SOSTITUZIONI -->
+<section class="sheet" id="shSerie" hidden>
+  <div class="testa"><h2>Serie di sostituzioni</h2><button class="piccolo chiudi">Chiudi</button></div>
+  <p class="nota">Le coppie si applicano in sequenza, dalla prima all’ultima, con le opzioni della scheda Trova.</p>
+  <div class="elenco" id="coppie"></div>
+  <div class="riga auto">
+    <button id="bAggCoppia" class="piccolo">+ coppia</button>
+    <span class="sep" style="flex:1"></span>
+    <button id="bProva" class="piccolo">Conta</button>
+    <button id="bApplica" class="pieno">Applica serie</button>
+  </div>
+  <p class="nota" id="esitoSerie"></p>
+  <div class="riga auto">
+    <input type="text" id="nomeSerie" placeholder="nome della serie" style="flex:1">
+    <button id="bSalvaSerie" class="piccolo">Salva</button>
+  </div>
+  <div class="elenco" id="elencoSerie"></div>
+</section>
+
+<!-- TESTI: caricamento e versioni -->
+<section class="sheet" id="shTesti" hidden>
+  <div class="testa"><h2>Testi</h2><button class="piccolo chiudi">Chiudi</button></div>
+  <div class="riga auto">
+    <input type="url" id="url" placeholder="link Wikisource" spellcheck="false" autocapitalize="none" autocorrect="off" style="flex:1">
+    <button id="bWiki" class="piccolo">Carica</button>
+  </div>
+  <p class="nota" id="rete"></p>
+  <textarea id="ta" rows="4" placeholder="oppure incolla qui il testo" spellcheck="false"></textarea>
+  <div class="riga auto">
+    <button id="bIncollato" class="piccolo">Apri incollato</button>
+    <button id="bFile" class="piccolo">File .txt</button>
+    <input type="file" id="file" accept=".txt,.md,text/plain" hidden>
+    <label class="chip"><input type="checkbox" id="cUnisci" checked> unisci righe</label>
+  </div>
+  <div class="riga auto">
+    <input type="text" id="nomeVer" placeholder="nome della versione" style="flex:1">
+    <button id="bSalvaVer" class="piccolo">Salva versione</button>
+    <button id="bScarica" class="piccolo">.txt</button>
+  </div>
+  <div class="elenco" id="elencoVer"></div>
+</section>
+
+<!-- VISTA -->
+<section class="sheet" id="shVista" hidden>
+  <div class="testa"><h2>Vista</h2><button class="piccolo chiudi">Chiudi</button></div>
+  <div class="riga">
+    <button id="bMeno">A −</button>
+    <button id="bPiu">A +</button>
+    <button id="bTema">Notte</button>
+  </div>
+  <div class="riga">
+    <button id="bLettura">Solo testo</button>
+    <button id="bPieno" hidden>Schermo intero</button>
+    <button id="bAnnulla">Annulla ultima</button>
+  </div>
+  <p class="nota">In Solo testo la barra sparisce: il cerchio in basso a destra la riporta. Su iPhone, con Aggiungi a schermo Home, l’app si apre senza barre di Safari.</p>
+</section>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const PAROLA = /[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu;
+
+let TESTO = '', token = [], trovate = [], corr = -1, storia = [];
+let manuali = new Set(), serieMark = new Set();
+let titolo = '';
+
+/* ---------- deposito locale ---------- */
+const D = {
+  leggi(k, d){ try { const v = localStorage.getItem('lsx.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  scrivi(k, v){ try { localStorage.setItem('lsx.' + k, JSON.stringify(v)); return true; } catch { return false; } }
+};
+
+/* ---------- modello ---------- */
+function tokenizza(){
+  token = [...TESTO.matchAll(PAROLA)].map(m => ({s:m.index, e:m.index + m[0].length}));
+}
+function paragrafi(){
+  const out = []; let i = 0; const re = /\n{2,}/g; let m;
+  while ((m = re.exec(TESTO))){ out.push([i, m.index]); i = m.index + m[0].length; }
+  out.push([i, TESTO.length]); return out;
+}
+function istantanea(){ return {t:TESTO, a:[...manuali], b:[...serieMark]}; }
+function setTesto(t, {storicizza=true} = {}){
+  if (storicizza){ storia.push(istantanea()); if (storia.length > 200) storia.shift(); }
+  TESTO = t; tokenizza(); calcola(); disegna(); autosalva();
+}
+function annulla(){
+  const p = storia.pop(); if (!p) return;
+  TESTO = p.t; manuali = new Set(p.a); serieMark = new Set(p.b);
+  tokenizza(); calcola(); disegna(); autosalva();
+}
+
+/* ---------- disegno ---------- */
+const esc = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function classe(t){
+  let c = '';
+  if (trovate.some(m => m.s < t.e && m.e > t.s)) c += ' m';
+  if (corr >= 0 && trovate[corr] && trovate[corr].s < t.e && trovate[corr].e > t.s) c += ' cur';
+  if (manuali.has(t.s)) c += ' ed';
+  else if (serieMark.has(t.s)) c += ' sb';
+  return c;
+}
+function disegna(){
+  const r = $('#reader'), y = r.scrollTop;
+  if (!TESTO.trim()){
+    r.innerHTML = '<div class="col"><p class="vuoto">Nessun testo aperto. Tocca Testi per caricarne uno.</p></div>';
+    aggiornaStato(); return;
+  }
+  let ti = 0, html = '';
+  for (const [a,b] of paragrafi()){
+    if (!TESTO.slice(a,b).trim()) continue;
+    let p = '', pos = a;
+    while (ti < token.length && token[ti].s < b){
+      const t = token[ti];
+      p += esc(TESTO.slice(pos, t.s));
+      p += `<span class="w${classe(t)}" data-s="${t.s}" data-e="${t.e}">${esc(TESTO.slice(t.s,t.e))}</span>`;
+      pos = t.e; ti++;
+    }
+    p += esc(TESTO.slice(pos, b));
+    html += `<p>${p}</p>`;
+  }
+  r.innerHTML = `<div class="col">${html}</div>`;
+  r.scrollTop = y;
+  aggiornaStato();
+}
+function aggiornaStato(){
+  $('#stato').textContent = TESTO ? (titolo ? titolo + ' · ' : '') + token.length + ' parole' : '';
+  $('#esito').textContent = $('#q').value
+    ? (trovate.length ? (corr + 1) + '/' + trovate.length : 'nessuna')
+    : '';
+  $('#bAnnulla').disabled = !storia.length;
+}
+function portaInVista(){
+  const el = $('#reader .cur');
+  if (el) el.scrollIntoView({block:'center'});
+}
+
+/* ---------- tocco su una parola ---------- */
+let inModifica = null, originale = '', annullata = false;
+$('#reader').addEventListener('click', e => {
+  const el = e.target.closest('.w');
+  if (!el || el === inModifica) return;
+  apriModifica(el);
+});
+function apriModifica(el){
+  if (inModifica) inModifica.blur();
+  inModifica = el; originale = el.textContent; annullata = false;
+  el.contentEditable = 'true';
+  el.focus();
+  setTimeout(() => {
+    const rng = document.createRange(); rng.selectNodeContents(el);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rng);
+  }, 0);
+}
+$('#reader').addEventListener('keydown', e => {
+  if (!inModifica) return;
+  if (e.key === 'Enter'){ e.preventDefault(); inModifica.blur(); }
+  else if (e.key === 'Escape'){ e.preventDefault(); annullata = true; inModifica.textContent = originale; inModifica.blur(); }
+  else if (e.key === 'Tab'){
+    e.preventDefault();
+    const tutte = $$('.w'), i = tutte.indexOf(inModifica);
+    const pross = tutte[i + (e.shiftKey ? -1 : 1)];
+    const s = pross && pross.dataset.s;
+    inModifica.blur();
+    if (s) setTimeout(() => { const n = $(`.w[data-s="${s}"]`); if (n) apriModifica(n); }, 0);
+  }
+});
+$('#reader').addEventListener('focusout', e => {
+  const el = e.target.closest && e.target.closest('.w[contenteditable="true"]');
+  if (!el) return;
+  const s = +el.dataset.s, f = +el.dataset.e;
+  const nuova = el.textContent.replace(/\s+/g, ' ').trim();
+  el.contentEditable = 'false'; inModifica = null;
+  if (annullata || nuova === originale){ el.textContent = originale; return; }
+  const delta = nuova.length - (f - s);
+  const sposta = set => new Set([...set].filter(o => o !== s).map(o => o > s ? o + delta : o));
+  manuali = sposta(manuali); serieMark = sposta(serieMark);
+  if (nuova) manuali.add(s);
+  setTesto(TESTO.slice(0, s) + nuova + TESTO.slice(f));
+});
+
+/* ---------- motore di sostituzione ---------- */
+function regola(q, {intera, maiusc, regex}){
+  if (!q) return null;
+  let src = regex ? q : q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (intera && !regex) src = '(?<![\\p{L}\\p{N}])' + src + '(?![\\p{L}\\p{N}])';
+  try { return new RegExp(src, 'gu' + (maiusc ? '' : 'i')); } catch { return null; }
+}
+function opzioni(){
+  return {
+    intera: $('#cIntera').checked,
+    maiusc: $('#cMaiusc').checked,
+    forma:  $('#cForma').checked,
+    regex:  $('#cRegex').checked
+  };
+}
+function forma(orig, rep, attiva){
+  if (!attiva || !rep) return rep;
+  if (orig.length > 1 && orig === orig.toUpperCase() && orig !== orig.toLowerCase()) return rep.toUpperCase();
+  if (orig[0] === orig[0].toUpperCase() && orig[0] !== orig[0].toLowerCase()) return rep[0].toUpperCase() + rep.slice(1);
+  return rep;
+}
+// sostituisce ovunque e riporta i segni alle nuove posizioni
+function applicaRegola(testo, re, repFn, segni){
+  let out = '', last = 0, delta = 0, n = 0, tappe = [], nuovi = [];
+  re.lastIndex = 0; let m, g = 0;
+  while ((m = re.exec(testo)) && g++ < 200000){
+    if (m[0] === ''){ re.lastIndex++; continue; }
+    const rep = repFn(m[0]);
+    out += testo.slice(last, m.index) + rep;
+    nuovi.push(m.index + delta);
+    delta += rep.length - m[0].length;
+    tappe.push({pos: m.index, delta});
+    last = m.index + m[0].length; n++;
+  }
+  out += testo.slice(last);
+  const sposta = o => { let d = 0; for (const x of tappe){ if (x.pos < o) d = x.delta; else break; } return o + d; };
+  const rimappa = set => new Set([...set].map(sposta));
+  return {testo: out, n, nuovi, segni: segni.map(rimappa)};
+}
+function contaOccorrenze(testo, re){
+  let n = 0, m, g = 0; re.lastIndex = 0;
+  while ((m = re.exec(testo)) && g++ < 200000){ if (m[0] === '') { re.lastIndex++; continue; } n++; }
+  return n;
+}
+
+/* ---------- trova ---------- */
+function calcola(){
+  trovate = []; const o = opzioni(); const re = regola($('#q').value, o);
+  if (re && TESTO){
+    let m, g = 0; re.lastIndex = 0;
+    while ((m = re.exec(TESTO)) && g++ < 200000){
+      if (m[0] === ''){ re.lastIndex++; continue; }
+      trovate.push({s:m.index, e:m.index + m[0].length});
+    }
+  }
+  if (!trovate.length) corr = -1;
+  else if (corr < 0 || corr >= trovate.length) corr = 0;
+}
+function vai(d){ if (!trovate.length) return; corr = (corr + d + trovate.length) % trovate.length; disegna(); portaInVista(); }
+function sostituisciUna(){
+  if (corr < 0 || !trovate[corr]) return;
+  const m = trovate[corr], o = opzioni();
+  const rep = forma(TESTO.slice(m.s, m.e), $('#r').value, o.forma);
+  const delta = rep.length - (m.e - m.s);
+  const sposta = set => new Set([...set].map(x => x > m.s ? x + delta : x));
+  manuali = sposta(manuali); serieMark = new Set([...sposta(serieMark), m.s]);
+  setTesto(TESTO.slice(0, m.s) + rep + TESTO.slice(m.e));
+  portaInVista();
+}
+function sostituisciTutte(){
+  const o = opzioni(), re = regola($('#q').value, o); if (!re) return;
+  const rep = $('#r').value;
+  const res = applicaRegola(TESTO, re, x => forma(x, rep, o.forma), [manuali, serieMark]);
+  storia.push(istantanea());
+  manuali = res.segni[0];
+  serieMark = new Set([...res.segni[1], ...res.nuovi]);
+  setTesto(res.testo, {storicizza:false});
+  $('#esito').textContent = res.n + ' sostituite';
+}
+['#q','#r'].forEach(s => $(s).addEventListener('input', () => { corr = -1; calcola(); disegna(); }));
+$$('.opzioni input').forEach(i => i.addEventListener('change', () => {
+  i.closest('.chip').classList.toggle('on', i.checked);
+  corr = -1; calcola(); disegna();
+}));
+$('#q').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); vai(1); } });
+$('#r').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); sostituisciUna(); } });
+$('#bSucc').onclick = () => vai(1);
+$('#bPrec').onclick = () => vai(-1);
+$('#bUno').onclick = sostituisciUna;
+$('#bTutte').onclick = sostituisciTutte;
+
+/* ---------- serie di sostituzioni ---------- */
+let coppie = D.leggi('coppie', [['scienza','morte'],['scientifico','mortale'],['scienziato','morente']]);
+function disegnaCoppie(){
+  const c = $('#coppie'); c.innerHTML = '';
+  coppie.forEach((p, i) => {
+    const d = document.createElement('div'); d.className = 'coppia';
+    d.innerHTML = `<input type="text" value="" placeholder="trova" spellcheck="false" autocapitalize="none">
+                   <span class="fre">→</span>
+                   <input type="text" value="" placeholder="con" spellcheck="false" autocapitalize="none">
+                   <button class="via" title="Togli">×</button>`;
+    const [a,b] = d.querySelectorAll('input');
+    a.value = p[0]; b.value = p[1];
+    a.oninput = () => { coppie[i][0] = a.value; salvaCoppie(); };
+    b.oninput = () => { coppie[i][1] = b.value; salvaCoppie(); };
+    d.querySelector('.via').onclick = () => { coppie.splice(i,1); salvaCoppie(); disegnaCoppie(); };
+    c.appendChild(d);
+  });
+}
+const salvaCoppie = () => D.scrivi('coppie', coppie);
+$('#bAggCoppia').onclick = () => { coppie.push(['','']); salvaCoppie(); disegnaCoppie(); };
+$('#bProva').onclick = () => {
+  const o = opzioni();
+  const righe = coppie.filter(p => p[0]).map(p => {
+    const re = regola(p[0], o);
+    return re ? `${p[0]} → ${p[1] || '(niente)'}: ${contaOccorrenze(TESTO, re)}` : `${p[0]}: regola non valida`;
+  });
+  $('#esitoSerie').textContent = righe.length ? righe.join(' · ') : 'Nessuna coppia compilata.';
+};
+$('#bApplica').onclick = () => {
+  if (!TESTO) return;
+  const o = opzioni();
+  let t = TESTO, segni = [manuali, serieMark], nuoviTot = [], totale = 0, dett = [];
+  for (const [a,b] of coppie){
+    if (!a) continue;
+    const re = regola(a, o); if (!re) continue;
+    const res = applicaRegola(t, re, x => forma(x, b, o.forma), [...segni, new Set(nuoviTot)]);
+    t = res.testo;
+    segni = [res.segni[0], res.segni[1]];
+    nuoviTot = [...res.segni[2], ...res.nuovi];
+    totale += res.n; dett.push(`${a}→${b}: ${res.n}`);
+  }
+  storia.push(istantanea());
+  manuali = segni[0];
+  serieMark = new Set([...segni[1], ...nuoviTot]);
+  setTesto(t, {storicizza:false});
+  $('#esitoSerie').textContent = totale ? `${totale} sostituzioni · ${dett.join(' · ')}` : 'Nessuna occorrenza trovata.';
+};
+let serieSalvate = D.leggi('serie', []);
+function disegnaSerie(){
+  const c = $('#elencoSerie'); c.innerHTML = '';
+  serieSalvate.forEach((s, i) => {
+    const d = document.createElement('div'); d.className = 'voce';
+    d.innerHTML = `<span class="nome"></span><button class="piccolo usa">Usa</button><button class="via">×</button>`;
+    d.querySelector('.nome').textContent = s.nome + ' (' + s.coppie.length + ')';
+    d.querySelector('.usa').onclick = () => { coppie = s.coppie.map(p => [...p]); salvaCoppie(); disegnaCoppie(); };
+    d.querySelector('.via').onclick = () => { serieSalvate.splice(i,1); D.scrivi('serie', serieSalvate); disegnaSerie(); };
+    c.appendChild(d);
+  });
+}
+$('#bSalvaSerie').onclick = () => {
+  const nome = $('#nomeSerie').value.trim() || 'serie ' + (serieSalvate.length + 1);
+  serieSalvate.unshift({nome, coppie: coppie.filter(p => p[0]).map(p => [...p])});
+  D.scrivi('serie', serieSalvate); $('#nomeSerie').value = ''; disegnaSerie();
+};
+
+/* ---------- versioni e caricamento ---------- */
+function normalizza(t){
+  t = t.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ');
+  if ($('#cUnisci').checked) t = t.replace(/([^\n])\n(?!\n)/g, '$1 ');
+  return t.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+}
+function apri(t, nome, {gia=false} = {}){
+  titolo = nome || 'testo';
+  storia = []; manuali = new Set(); serieMark = new Set(); corr = -1;
+  TESTO = gia ? t : normalizza(t);
+  tokenizza(); calcola(); disegna(); autosalva();
+  chiudiSheet();
+}
+let timer = null;
+function autosalva(){
+  clearTimeout(timer);
+  timer = setTimeout(() => {
+    D.scrivi('corrente', {titolo, testo:TESTO, a:[...manuali], b:[...serieMark]});
+  }, 700);
+}
+let versioni = D.leggi('versioni', []);
+function disegnaVersioni(){
+  const c = $('#elencoVer'); c.innerHTML = '';
+  if (!versioni.length){ c.innerHTML = '<p class="nota">Nessuna versione salvata.</p>'; return; }
+  versioni.forEach((v, i) => {
+    const d = document.createElement('div'); d.className = 'voce';
+    d.innerHTML = `<span class="nome"></span><span class="data"></span><button class="piccolo apri">Apri</button><button class="via">×</button>`;
+    d.querySelector('.nome').textContent = v.nome;
+    d.querySelector('.data').textContent = new Date(v.q).toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit'});
+    d.querySelector('.apri').onclick = () => {
+      apri(v.testo, v.titolo || v.nome, {gia:true});
+      manuali = new Set(v.a || []); serieMark = new Set(v.b || []); disegna();
+    };
+    d.querySelector('.via').onclick = () => { versioni.splice(i,1); D.scrivi('versioni', versioni); disegnaVersioni(); };
+    c.appendChild(d);
+  });
+}
+$('#bSalvaVer').onclick = () => {
+  if (!TESTO) return;
+  const nome = $('#nomeVer').value.trim() || (titolo + ' ' + new Date().toLocaleString('it-IT', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));
+  versioni.unshift({nome, titolo, testo:TESTO, a:[...manuali], b:[...serieMark], q:Date.now()});
+  const ok = D.scrivi('versioni', versioni);
+  $('#nomeVer').value = '';
+  if (!ok){ versioni.shift(); $('#rete').textContent = 'Memoria piena o disattivata: scarica il .txt per non perdere il lavoro.'; }
+  disegnaVersioni();
+};
+$('#bScarica').onclick = () => {
+  const b = new Blob([TESTO], {type:'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(b);
+  a.download = (titolo || 'testo').replace(/[^\w\-À-ÿ ]+/g, '').trim() + '.txt';
+  a.click(); URL.revokeObjectURL(a.href);
+};
+$('#bIncollato').onclick = () => { const t = $('#ta').value; if (t.trim()) apri(t, 'testo incollato'); };
+$('#bFile').onclick = () => $('#file').click();
+$('#file').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  f.text().then(t => apri(t, f.name.replace(/\.[^.]+$/, '')));
+};
+$('#bWiki').onclick = caricaWiki;
+$('#url').addEventListener('keydown', e => { if (e.key === 'Enter') caricaWiki(); });
+async function caricaWiki(){
+  const stato = $('#rete');
+  let u;
+  try { u = new URL($('#url').value.trim()); }
+  catch { stato.textContent = 'Serve un link completo, con https:// davanti.'; return; }
+  const pagina = decodeURIComponent(u.pathname.replace(/^\/wiki\//, ''));
+  stato.textContent = 'Scarico ' + pagina + '…';
+  const api = `https://${u.hostname}/w/api.php?action=parse&page=${encodeURIComponent(pagina)}&prop=text&formatversion=2&format=json&origin=*`;
+  try {
+    const risp = await fetch(api);
+    const dati = await risp.json();
+    if (dati.error) throw new Error(dati.error.info || 'pagina non trovata');
+    const doc = new DOMParser().parseFromString(dati.parse.text, 'text/html');
+    doc.querySelectorAll('style,script,table,sup,.reference,.mw-editsection,.noprint,#toc,.ws-noexport,.mw-references-wrap')
+       .forEach(n => n.remove());
+    const blocchi = [...doc.querySelectorAll('p,h2,h3,h4,dd,blockquote,li')]
+      .map(n => n.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    if (!blocchi.length) throw new Error('nessun testo utile');
+    stato.textContent = '';
+    apri(blocchi.join('\n\n'), (dati.parse.title || pagina).split('/').pop(), {gia:true});
+  } catch (err){
+    stato.textContent = 'Scaricamento non riuscito (' + err.message + '). Apri la pagina in Safari, copia il testo e incollalo qui sotto.';
+  }
+}
+
+/* ---------- pannelli ---------- */
+function apriSheet(id){
+  $$('.sheet').forEach(s => s.hidden = s.id !== id);
+  $('#velo').hidden = false;
+}
+function chiudiSheet(){ $$('.sheet').forEach(s => s.hidden = true); $('#velo').hidden = true; }
+$$('.chiudi').forEach(b => b.onclick = chiudiSheet);
+$('#velo').onclick = chiudiSheet;
+$('#bTrova').onclick = () => { apriSheet('shTrova'); $('#q').focus(); $('#q').select(); };
+$('#bSerie').onclick = () => apriSheet('shSerie');
+$('#bTesti').onclick = () => apriSheet('shTesti');
+$('#bVista').onclick = () => apriSheet('shVista');
+
+// tiene i pannelli sopra la tastiera di iOS
+if (window.visualViewport){
+  const vv = window.visualViewport;
+  const adatta = () => {
+    const giu = Math.max(0, innerHeight - vv.height - vv.offsetTop);
+    $$('.sheet').forEach(s => s.style.transform = giu ? `translateY(-${giu}px)` : '');
+  };
+  vv.addEventListener('resize', adatta); vv.addEventListener('scroll', adatta);
+}
+
+/* ---------- vista ---------- */
+let vista = D.leggi('vista', {corpo:1.2, tema:''});
+function applicaVista(){
+  document.documentElement.style.setProperty('--corpo', vista.corpo.toFixed(2) + 'rem');
+  document.documentElement.dataset.tema = vista.tema;
+  $('#bTema').textContent = vista.tema === 'notte' ? 'Giorno' : 'Notte';
+  D.scrivi('vista', vista);
+}
+$('#bPiu').onclick = () => { vista.corpo = Math.min(2.4, vista.corpo + .1); applicaVista(); };
+$('#bMeno').onclick = () => { vista.corpo = Math.max(.9, vista.corpo - .1); applicaVista(); };
+$('#bTema').onclick = () => { vista.tema = vista.tema === 'notte' ? '' : 'notte'; applicaVista(); };
+$('#bLettura').onclick = () => { document.body.classList.add('lettura'); chiudiSheet(); };
+$('#torna').onclick = () => document.body.classList.remove('lettura');
+$('#bAnnulla').onclick = annulla;
+if (document.documentElement.requestFullscreen){
+  $('#bPieno').hidden = false;
+  $('#bPieno').onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape'){ chiudiSheet(); document.body.classList.remove('lettura'); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f'){ e.preventDefault(); $('#bTrova').click(); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !inModifica){ e.preventDefault(); annulla(); }
+});
+
+/* ---------- avvio ---------- */
+$$('.opzioni input').forEach(i => i.closest('.chip').classList.toggle('on', i.checked));
+disegnaCoppie(); disegnaSerie(); disegnaVersioni(); applicaVista();
+$('#url').value = 'https://it.wikisource.org/wiki/Problemi_della_scienza/Capitolo_I';
+const salvato = D.leggi('corrente', null);
+if (salvato && salvato.testo){
+  titolo = salvato.titolo || 'testo';
+  manuali = new Set(salvato.a || []); serieMark = new Set(salvato.b || []);
+  TESTO = salvato.testo; tokenizza(); calcola(); disegna();
+} else {
+  aggiornaStato();
+}
+</script>
+</body>
+</html>
