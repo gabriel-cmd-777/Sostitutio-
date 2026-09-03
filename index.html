@@ -5,9 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Lettore">
+<meta name="apple-mobile-web-app-title" content="Sostitutio">
+<link rel="apple-touch-icon" href="icona.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' fill='%23e9eae4'/%3E%3Ctext x='90' y='131' font-family='Georgia,serif' font-size='124' text-anchor='middle' fill='%23171a19'%3ES%3C/text%3E%3C/svg%3E">
 <meta name="theme-color" content="#e9eae4">
-<title>Lettore con sostituzioni</title>
+<title>Sostitutio</title>
 <style>
   :root{
     --paper:#e9eae4;
@@ -138,7 +140,7 @@
 </header>
 
 <main id="reader" autocorrect="off" autocapitalize="none" spellcheck="false">
-  <div class="col"><p class="vuoto">Nessun testo aperto. Tocca Testi per caricarne uno.</p></div>
+  <div class="col"><p class="vuoto">Sostitutio · nessun testo aperto. Tocca Testi per caricarne uno.</p></div>
 </main>
 
 <button id="torna" title="Mostra la barra">▾</button>
@@ -193,9 +195,13 @@
   <textarea id="ta" rows="4" placeholder="oppure incolla qui il testo" spellcheck="false"></textarea>
   <div class="riga auto">
     <button id="bIncollato" class="piccolo">Apri incollato</button>
+    <button id="bPulisci" class="piccolo">Svuota riquadro</button>
     <button id="bFile" class="piccolo">File .txt</button>
     <input type="file" id="file" accept=".txt,.md,text/plain" hidden>
     <label class="chip"><input type="checkbox" id="cUnisci" checked> unisci righe</label>
+  </div>
+  <div class="riga auto">
+    <button id="bCancella" class="piccolo">Cancella il testo aperto</button>
   </div>
   <div class="riga">
     <button id="bCopia" class="pieno">Copia tutto il testo</button>
@@ -276,7 +282,7 @@ function classe(t){
 function disegna(){
   const r = $('#reader'), y = r.scrollTop;
   if (!TESTO.trim()){
-    r.innerHTML = '<div class="col"><p class="vuoto">Nessun testo aperto. Tocca Testi per caricarne uno.</p></div>';
+    r.innerHTML = '<div class="col"><p class="vuoto">Sostitutio · nessun testo aperto. Tocca Testi per caricarne uno.</p></div>';
     aggiornaStato(); return;
   }
   let ti = 0, html = '';
@@ -671,6 +677,16 @@ $('#bScarica').onclick = () => {
   a.click(); URL.revokeObjectURL(a.href);
 };
 $('#bIncollato').onclick = () => { const t = $('#ta').value; if (t.trim()) apri(t, 'testo incollato'); };
+$('#bPulisci').onclick = () => { $('#ta').value = ''; $('#ta').focus(); };
+$('#bCancella').onclick = () => {
+  if (!TESTO) return;
+  if (!confirm('Cancellare il testo aperto? Annulla ultima lo riporta indietro.')) return;
+  manuali = new Set(); serieMark = new Set(); corr = -1;
+  setTesto('');
+  titolo = '';
+  $('#esitoExp').textContent = 'Testo cancellato. Le versioni salvate restano.';
+  aggiornaStato();
+};
 $('#bFile').onclick = () => $('#file').click();
 $('#file').onchange = e => {
   const f = e.target.files[0]; if (!f) return;
